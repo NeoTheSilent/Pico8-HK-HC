@@ -1,6 +1,9 @@
 pico-8 cartridge // http://www.pico-8.com
 version 41
 __lua__
+
+--This File is now out of date. It will be kept here for record purposes until it is deemed unnecessary.
+
 plx=16
 ply=476
 plmp=2
