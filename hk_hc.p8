@@ -11,7 +11,9 @@ __lua__
 
 function _init()
   
-  pause=60
+  pause=60 
+  camx=0
+  camy=0
   
   player={}
     player.x=106
@@ -38,6 +40,12 @@ function _init()
   adddoor(408,472)
   
   
+  --invisible walls that will turn visible only when player is going into them
+  wall={}
+  
+  addwall(8,432,5,7)
+  addwall(56,488,2,0)
+  
 end
 
 function _draw()
@@ -48,7 +56,7 @@ function _draw()
  --place hp on screen
  
  for i=1,player.hp do
-	 spr(003,player.x-50+i*10,player.y-50)
+	  spr(003,player.x-50+i*10,player.y-50)
 	end 
   
  --place enemies
@@ -69,9 +77,16 @@ function _draw()
    end
  end
  
+ --place invisible walls
+ --disappear when we go through
+ 
+ for w in all(wall) do
+   placewall(w)
+ end
+ 
  --debug testing
- print("player.hp",player.x+20,player.y-62)
- print(player.hp,player.x+55,player.y-62)
+ print("player.x",player.x+20,player.y-62)
+ print(player.x,player.x+55,player.y-62)
  print("pause: ",player.x+7,player.y-55)
  print(pause,player.x+39,player.y-55)
 end
@@ -91,14 +106,24 @@ function _update()
  
  gravity() 
  
- --lock camera
- if(player.y<450)
+  
+ --lock camera x coord
+ if(player.x>64)
  then
-  camera(player.x-64,player.y-64)
+  camx=player.x-64
  else
-  camera(player.x-64,380)
+  camx=0
  end
  
+ --lock camera y coord
+ if(player.y<450)
+ then
+  camy=player.y-64
+ else
+  camy=380
+ end
+ 
+ camera(camx,camy) 
  
  for m in all(critter) do
    critter_move(m)
@@ -256,6 +281,30 @@ function adddoor(mx,my)
     }
   
   add (door,m)
+end
+
+function addwall(mx,my,mw,mh)
+  local w={
+    id=typ,
+    x=mx,
+    y=my,
+    w=mw,
+    h=mh,
+    }
+  
+  add (wall,w)
+end 
+
+function placewall(w)  
+  --if the player isn't in the wall 
+  if (player.x-w.x-(w.w*8)>4)
+  then
+    for i=0,w.w do
+      for j=0,w.h do  
+        spr(058,w.x+(i*8),w.y+(j*8))
+      end  
+    end
+  end
 end
 __gfx__
 00000000000000000000000000555500000000000000000000000000000000005111151551515115511511151151151551115151150000510000000000000000
