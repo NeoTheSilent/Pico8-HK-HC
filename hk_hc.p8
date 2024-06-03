@@ -1,7 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
---variables
+--main
 
 --flag definitions:
 --0 = 
@@ -11,14 +11,14 @@ __lua__
 
 function _init()
   
-  --special variables for cutscenes
+  --utility information
   cutscene1=false
-  
   pause=0
-    
   camx=106
   camy=376
+  nat=0
 
+  --player
   player={}
     --stats for sprites
     player.sp=001
@@ -26,16 +26,24 @@ function _init()
     player.y=376
     player.w=8
     player.h=8
+    --flp represents direction
+    --left = true, right = false
     player.flp=false
     --stats for gameplay
     player.hp=5
     player.soul=100
+    player.inv=0
     --stats for movement
     player.mp=2
     player.grav=2
     player.jump=-12
     player.ground=false
-
+  
+  nail={}
+    nail.x=0
+    nail.y=0
+    nail.sp=004
+  
   critter={}
   
   addcrit(0,064,276,472)
@@ -108,7 +116,19 @@ function _update()
   
 
  for m in all(critter) do
+   --calculate critter movement
    critter_move(m)
+   --calculate if they're touching
+   if livecol(m,player) and player.inv==0
+   then
+     player.hp-=1
+     player.inv=30
+   end
+   
+   if (m.hp==0)
+   then
+     del (critter,m)
+   end
  end 
  
 end
@@ -118,120 +138,142 @@ end
 --player movement
 
 function collision(obj,dir,flg)
- --obj is a table w/ x,y,w,h
- local x=obj.x local y=obj.y
- local w=obj.w local h=obj.h
- 
- --we need a dummy table for comp
- local x1=0 local x2=0  
- local y1=0 local y2=0
- 
- if dir=="left" then
-  x1=x-1   y1=y
-  x2=x     y2=y+h-1
- 
- elseif dir=="right" then
-  x1=x+w+1 y1=y
-  x2=x+w+2 y2=y+h-1
+  --obj is a table w/ x,y,w,h
+  local x=obj.x local y=obj.y
+  local w=obj.w local h=obj.h
   
- elseif dir=="up" then
-  x1=x+1   y1=y-1
-  x2=x+w   y2=y
+  --we need a dummy table for comp
+  local x1=0 local x2=0  
+  local y1=0 local y2=0
+  
+  if dir=="left" then
+    x1=x-1   y1=y
+    x2=x     y2=y+h-1
  
- elseif dir=="down" then
-  x1=x+1   y1=y+h
-  x2=x+w   y2=y+h
- end
+  elseif dir=="right" then
+    x1=x+w+1 y1=y
+    x2=x+w+2 y2=y+h-1
+  
+  elseif dir=="up" then
+    x1=x+1   y1=y-1
+    x2=x+w   y2=y
  
- --pixels to tiles
- x1/=8 y1/=8
- x2/=8 y2/=8
+  elseif dir=="down" then
+    x1=x+1   y1=y+h
+    x2=x+w   y2=y+h
+  end
+ 
+  --pixels to tiles
+  x1/=8 y1/=8
+  x2/=8 y2/=8
 
- if fget(mget(x1,y1), flg)
- or fget(mget(x1,y2), flg)
- or fget(mget(x2,y1), flg)
- or fget(mget(x2,y2), flg)
- then return true
- else return false
- end
+  if fget(mget(x1,y1), flg)
+  or fget(mget(x1,y2), flg)
+  or fget(mget(x2,y1), flg)
+  or fget(mget(x2,y2), flg)
+  then return true
+  else return false
+  end
 end
 
 
 function gravity()
- --learn what's beneath player
- floor=collision(player,"down",1)
- --learn what's above player
- ciel=collision(player,"up",1)
+  --learn what's beneath player
+  floor=collision(player,"down",1)
+  --learn what's above player
+  ciel=collision(player,"up",1)
  
- if (ciel==true)
- then
+  if (ciel==true)
+  then
     player.grav=2
- end  
- if (player.grav!=2)
- then 
+  end  
+  if (player.grav!=2)
+  then 
     player.grav+=2
- end  
- if ((floor==false) or (player.grav<0))
- then 
-   player.y+=player.grav
-   player.ground=false
- else
-   player.ground=true
- end
+  end  
+  if ((floor==false) or (player.grav<0))
+  then 
+    player.y+=player.grav
+    player.ground=false
+  else
+    player.ground=true
+  end
 end
 
-function h_move()
-  --if we press left
-  if (btn(0) 
-  --and there's nothing left
-  and (not collision(player,"left",2)))
+function move()
+
+  --horizontal movement
+
+  --if we press left and there's nothing left
+  if (btn(0) and (not collision(player,"left",2)))
 	 then 
 	   player.x-=player.mp
 	   player.flp=true
-	 --if we press right
-	 elseif (btn(1)
-	 --and there's nothing right
-	 and (not collision(player,"right",2)))
+	 --if we press right and there's nothing right
+	 elseif (btn(1) and (not collision(player,"right",2)))
 	 then
 				player.x+=player.mp
 				player.flp=false
 	 end
-end
 
-function v_move()
-  --we only jump if on ground
-  if ((player.ground==true) 
-  --and if we're pressing jump
-  and btn(5))
+  --vertical moving
+  
+  --we only jump if on ground and if we're pressing jump
+  if player.ground==true and btn(5)
 	 then 
     player.grav=player.jump
   end
 end
+-->8
+--attacking
 
 function attack()
   --we will need to create a lingering attack and hitbox
-  if btn(4)
+  if btn(4) and nat==0
   then 
+    --to prevent spamming in future update
+    --nat=30
+    
     --we prioritize vertical attacks
     --attack up
     if btn(2)
     then
-      spr(005,player.x,player.y-7,1,1,true,false)
+      natk(0,-7,005,true,false)
     --attack down
     elseif (btn(3) and not player.ground)
     then
-      spr(005,player.x,player.y+7,1,1,true,true)
+      natk(0,7,005,true,true)
     --attack right
-    elseif btn(1)
+    elseif btn(1) or not player.flp
     then
-      spr(004,player.x+7,player.y+1)
+      natk(7,1,004,false,true)
     --attack left
-    elseif btn(0)
+    elseif btn(0) or player.flp
     then
-      spr(004,player.x-7,player.y+1,1,1,true,false)
+      natk(-7,1,004,true,false)    
     end
   end
 end
+
+function natk(nx,ny,nsp,tf1,tf2)
+  --changing stats for the nail
+  nail.x=player.x+nx
+  nail.y=player.y+ny
+  nail.sp=nsp
+    
+  spr(nail.sp,nail.x,nail.y,1,1,tf1,tf2)    
+  
+  --hurt enemies if they're in it
+  for m in all(critter) do
+  --calculate if they're touching
+  if livecol(m,nail) and m.inv==0
+  then
+     m.hp-=1
+     m.inv=30
+   end
+ end 
+end
+
 -->8
 --enemy ai
 
@@ -249,6 +291,10 @@ function addcrit(idd,typ,mx,my)
     mp=0.5,
     --the direction and if flipped
     dir="left",
+    --invincibility frames
+    inv=0,
+    --hp - default is 2 hits
+    hp=2,
     }
   
   add (critter,m)
@@ -313,16 +359,32 @@ end
 --utilities
 
 function pauset()
-  if(pause>0)
+  if pause>0
   then
     pause-=1
   end
  
-  if(pause==0)
+  if pause==0
   then 
-    h_move()
-    v_move()
+    move()
   end 
+  
+  if player.inv>0
+  then
+    player.inv-=1
+  end
+  
+  for m in all(critter) do
+    if m.inv>0
+    then
+      m.inv-=1
+    end 
+  end
+  
+  if nat>0
+  then
+    nat-=1
+  end
 end
 
 function placesprite(w)
@@ -357,10 +419,10 @@ function ui()
 	 end 
 	 
 	 --debug testing 
-	 print("right:",camx+84,camy+10) 
-	 print(collision(player,"right",2),camx+108,camy+10) 
-	 print("px:",camx+84,camy+18) 
-	 print(player.x,camx+108,camy+18)
+	 print("left?:",camx+84,camy+10) 
+	 print(player.flp,camx+108,camy+10) 
+	 print("inv:",camx+84,camy+18) 
+	 print(player.inv,camx+108,camy+18)
 end
  
 function cutscene()
@@ -411,7 +473,15 @@ function livecol(a,b)
  --should be something such as
  --if a.x within b.x then
  
- return false
+ if abs(a.x-b.x)<4
+ then
+    if abs(a.y-b.y)<4
+    then
+       return true
+    end
+ else
+   return false
+ end
 end
 __gfx__
 00000000000000000555555000555500000000000000000000000000000000005111151551515115511511151151151551115151150000510000005115000000
