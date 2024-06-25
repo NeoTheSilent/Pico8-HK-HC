@@ -52,10 +52,10 @@ function _init()
   
   door={}
 
-  adddoor(200,464)
-  adddoor(248,464)
-  adddoor(296,464)
-  adddoor(408,464)
+  adddoor(200,472)
+  adddoor(248,472)
+  adddoor(296,472)
+  adddoor(408,472)
   
   
   --invisible walls that will turn visible only when player is going into them
@@ -82,15 +82,15 @@ function _draw()
 
   --place breakable doors
   --disappear when we go through
-  for m in all(door) do
-    if (abs(player.x-m.x)>4 and m.hp==1)
+  for m in all(door) do    
+    if m.hp>0
     then
-      spr(024,m.x,m.y)
-      spr(025,m.x+8,m.y)
-      spr(040,m.x,m.y+8)
-      spr(041,m.x+8,m.y+8)
+      spr(024,m.x,m.y-8)
+      spr(025,m.x+8,m.y-8)
+      spr(040,m.x,m.y)
+      spr(041,m.x+8,m.y)
     else
-      m.hp=0
+      del(door,m)
     end
   end
  
@@ -135,7 +135,7 @@ end
 
 
 -->8
---player movement
+--movement
 
 function collision(obj,dir,flg)
   --obj is a table w/ x,y,w,h
@@ -203,19 +203,27 @@ end
 function move()
 
   --horizontal movement
-
   --if we press left and there's nothing left
-  if (btn(0) and (not collision(player,"left",2)))
-	 then 
-	   player.x-=player.mp
-	   player.flp=true
+  if btn(0) 
+  then
+    --if we press left, we always turn left
+    player.flp=true
+    player.dir="left"
+    --now, we check to see if we actually move
+    if not entity_wall(player,0) and (not collision(player,"left",2))
+	   then 	   
+	     player.x-=player.mp
+	   end
 	 --if we press right and there's nothing right
-	 elseif (btn(1) and (not collision(player,"right",2)))
-	 then
-				player.x+=player.mp
-				player.flp=false
-	 end
-
+	 elseif btn(1)
+  then
+    player.flp=false    
+    player.dir="right"
+    if not entity_wall(player,0) and (not collision(player,"right",2))
+  	 then
+	    	player.x+=player.mp
+	   end
+  end
   --vertical moving
   
   --we only jump if on ground and if we're pressing jump
@@ -223,6 +231,43 @@ function move()
 	 then 
     player.grav=player.jump
   end
+end
+
+function entity_wall(x,num)
+  --purpose of this function is to test if there's an item to the left or right of "x", "x" being a critter or a player
+  --if num=0, it's the player
+  --if num=1, it's an enemy  
+  --temp variable is needed to differentiate left and right
+  tempx=0
+  --we need to adjust the numbers based on if the collison we're aiming for is to the left or to the right
+  if x.dir=="left" 
+  then
+    tempx=4
+  else
+    tempx=-4
+  end
+  
+  --if "x" is next to any door, return true.
+  for d in all(door) do
+    if abs(x.x-tempx-d.x)<=4 and abs(x.y-d.y)<=12
+    then
+      return true
+    end
+  end
+  
+  --if "x" is next to any enemy, return true  
+  if num==0
+  then
+		  for c in all(critter) do
+		    if abs(x.x-tempx-c.x)<=8 and abs(x.y-c.y)<=4
+		    then
+		      return true
+		    end
+		  end 
+  end 
+  
+  --if there's no doors or enemies near, then we return that there's nothing next to us
+  return false
 end
 -->8
 --attacking
@@ -265,13 +310,23 @@ function natk(nx,ny,nsp,tf1,tf2)
   
   --hurt enemies if they're in it
   for m in all(critter) do
-  --calculate if they're touching
-  if livecol(m,nail) and m.inv==0
-  then
-     m.hp-=1
-     m.inv=30
-   end
- end 
+    --calculate if they're touching
+    if livecol(m,nail) and m.inv==0
+    then
+      m.hp-=1
+      m.inv=30
+    end
+  end
+  
+  --hurt doors if they're in it
+  for m in all(door) do
+    --calculate if they're touching
+    if livecol(m,nail) and m.inv==0
+    then
+      m.hp-=1
+      m.inv=30
+    end
+  end 
 end
 
 -->8
@@ -305,7 +360,7 @@ function critter_move(obj)
   if obj.id==0
   then
     --moving left
-  		if (obj.dir=="left" and not collision(obj,"left",3))
+  		if (obj.dir=="left" and not entity_wall(obj,1) and not collision(obj,"left",3))
 				then 
 				  obj.x-=obj.mp	
 				else
@@ -313,7 +368,7 @@ function critter_move(obj)
 				  obj.sp=066
 			 end	  
 	   --moving right
-	   if (obj.dir=="right" and not collision(obj,"right",3))
+	   if (obj.dir=="right" and not entity_wall(obj,1) and not collision(obj,"right",3))
 				then 
 				  obj.x+=obj.mp	
 				else
@@ -331,6 +386,7 @@ function adddoor(mx,my)
     x=mx,
     y=my,
     hp=1,
+    inv=0,
     }
   
   add (door,m)
@@ -350,7 +406,7 @@ end
 
 function placewall(w,x1,x2)  
   --if the player isn't in the wall 
-  if x1>=x2 -- and c==false)
+  if x1>=x2
   then
     placesprite(w)
   end
@@ -368,22 +424,30 @@ function pauset()
   then 
     move()
   end 
+    
+  --invincibility frames
   
-  if player.inv>0
-  then
-    player.inv-=1
-  end
+  inv_down(player)
   
   for m in all(critter) do
-    if m.inv>0
-    then
-      m.inv-=1
-    end 
+    inv_down(m)
   end
   
+  for m in all(door) do
+    inv_down(m)
+  end
+  
+  --nail cooldown
   if nat>0
   then
     nat-=1
+  end
+end
+
+function inv_down(p)
+  if p.inv>0
+  then
+    p.inv-=1
   end
 end
 
@@ -470,8 +534,6 @@ end
 
 function livecol(a,b)
  --calculations
- --should be something such as
- --if a.x within b.x then
  
  if abs(a.x-b.x)<4
  then
@@ -602,7 +664,7 @@ e2f2000000c2e2e2a100000000000000000000000000000000110000000000110000000000110000
 000000c2d2e2d2e2d2e2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 e2f2000000c2a3a3a2b2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c2d2e2f20000
 000000c2d2d2d2d2d2d2e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e2a1000000c2a3a3a3b300000000000000000000000000000000000000000020000000000020000000000000200000000000002000c1e1d1e1f1e0c0c0f00000
+e2a1000000c2a3a3a3b30000000000000000000000000000000000000000000000000000000000000000b100b100000000000000b1c1e1d1e1f1e0c0c0f00000
 000000c2d2d2b0c0c090e20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 e2e1d1e1d1e1d2d2d2d2d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1d1e1f100c1d1d1e1d1e1d1e1f1e0737373f00000000000c1
 d1e1f100a0b0000000c2d20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -613,7 +675,7 @@ d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3d3e3
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000939393e3e2e2d1e1d1e1e1e1e1d1e1
 e1d1e1d1d2d2e2d2d2e2e20000000011000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __gff__
-00000808000000000000000000000000070700000000000007070000000f0f00000000000000000007070000000f0f000000000000000000000000000700000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000808000000000000000000000000070700000000000007070008000f0f00000000000000000007070000000f0f000000000000000000000000000700000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 1010100000000000000000101010101010101010101000000000000101010011100000000000000101003f3f000000101100000000000000000000000000001e10000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
