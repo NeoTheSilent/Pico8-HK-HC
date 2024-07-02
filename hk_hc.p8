@@ -40,8 +40,10 @@ function _init()
     player.ground=false
   
   nail={}
-    nail.x=0
-    nail.y=0
+    nail.x=1000
+    nail.y=1000
+    nail.w=8
+    nail.h=8
     nail.sp=004
   
   critter={}
@@ -49,9 +51,11 @@ function _init()
   addcrit(0,064,276,472)
   addcrit(0,064,376,472)
   addcrit(0,064,476,496)
+  --debug critter
+  --addcrit(0,064,100,472) 
   
   door={}
-
+  
   adddoor(200,472)
   adddoor(248,472)
   adddoor(296,472)
@@ -66,11 +70,6 @@ function _init()
   
 end
 
---basic draw function to save space
-function drawspr(obj)
-  spr(obj.sp,obj.x,obj.y,1,1,obj.flp,false)
-end
-
 function _draw()
   cls()
   map(0,0)
@@ -78,6 +77,7 @@ function _draw()
   --place enemies
   for m in all(critter) do
     drawspr(m)
+    rect(m.x,m.y,m.x+m.w,m.y+m.w)
   end
 
   --place breakable doors
@@ -119,10 +119,19 @@ function _update()
    --calculate critter movement
    critter_move(m)
    --calculate if they're touching
-   if livecol(m,player) and player.inv==0
+   if entity_wall(player,0) and player.inv==0
    then
      player.hp-=1
      player.inv=30
+     --figure out which way to bump the player
+     if ((player.x+(player.w/2))-(m.x+(m.w/2)))>0
+     then
+       player.x+=6
+       player.y-=6
+     else
+       player.x-=6
+       player.y-=6
+     end
    end
    
    if (m.hp==0)
@@ -234,10 +243,11 @@ function move()
 end
 
 function entity_wall(x,num)
-  --purpose of this function is to test if there's an item to the left or right of "x", "x" being a critter or a player
+  --purpose of this function is to test if there's an item to the left or right of "x"
   --if num=0, it's the player
-  --if num=1, it's an enemy  
-  --temp variable is needed to differentiate left and right
+  --if num=1, it's an enemy 
+  --if num=2, it's a nail 
+  
   tempx=0
   --we need to adjust the numbers based on if the collison we're aiming for is to the left or to the right
   if x.dir=="left" 
@@ -245,21 +255,23 @@ function entity_wall(x,num)
     tempx=4
   else
     tempx=-4
-  end
-  
+  end  
+    
   --if "x" is next to any door, return true.
   for d in all(door) do
-    if abs(x.x-tempx-d.x)<=4 and abs(x.y-d.y)<=12
+    if abs(x.x-tempx-d.x)<=4 
+    and abs(x.y-d.y)<=12
     then
       return true
     end
   end
   
   --if "x" is next to any enemy, return true  
-  if num==0
+  if (num==0 or num==2)
   then
 		  for c in all(critter) do
-		    if abs(x.x-tempx-c.x)<=8 and abs(x.y-c.y)<=4
+		    if abs((x.x-1+(x.w/2))-(c.x+(c.w/2)))<=8
+		    and abs(x.y-c.y)<=4
 		    then
 		      return true
 		    end
@@ -341,7 +353,7 @@ function addcrit(idd,typ,mx,my)
     sp=typ,
     --dimensions for the enemy
     x=mx,    w=8,
-    y=my,    h=7,
+    y=my,    h=8,
     --how fast it moves
     mp=0.5,
     --the direction and if flipped
@@ -360,15 +372,20 @@ function critter_move(obj)
   if obj.id==0
   then
     --moving left
-  		if (obj.dir=="left" and not entity_wall(obj,1) and not collision(obj,"left",3))
+  		if (obj.dir=="left" 
+  		and not entity_wall(obj,1) 
+  		and not collision(obj,"left",3))
 				then 
 				  obj.x-=obj.mp	
 				else
 				  obj.dir="right"
 				  obj.sp=066
 			 end	  
+			 
 	   --moving right
-	   if (obj.dir=="right" and not entity_wall(obj,1) and not collision(obj,"right",3))
+	   if (obj.dir=="right" 
+	   and not entity_wall(obj,1) 
+	   and not collision(obj,"right",3))
 				then 
 				  obj.x+=obj.mp	
 				else
@@ -377,6 +394,7 @@ function critter_move(obj)
 			 end
 		end
 end
+
 -->8
 --environment
 
@@ -484,9 +502,18 @@ function ui()
 	 
 	 --debug testing 
 	 print("left?:",camx+84,camy+10) 
-	 print(player.flp,camx+108,camy+10) 
+	 print(player.x,camx+108,camy+10) 
 	 print("inv:",camx+84,camy+18) 
 	 print(player.inv,camx+108,camy+18)
+	 for m in all(critter) do
+	   print("m.x:",camx+84,camy+26)
+	   print(m.x,camx+108,camy+26)
+	 end
+end
+
+--basic draw function to save space
+function drawspr(obj)
+  spr(obj.sp,obj.x,obj.y,1,1,obj.flp,false)
 end
  
 function cutscene()
