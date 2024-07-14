@@ -2,6 +2,7 @@ pico-8 cartridge // http://www.pico-8.com
 version 42
 __lua__
 --main
+--reworked last on 07/13
 
 --flag definitions:
 --0 = 
@@ -13,7 +14,14 @@ function _init()
   
   --utility information
   cutscene1=false
+  --pause for everything
+  --ensure that two pauses are needed
   pause=0
+  --pauses used for taking damage
+  tempause=0
+  --how long a nail stays out
+  atktime=0
+  --camera positioning
   camx=106
   camy=376
   nat=0
@@ -71,33 +79,20 @@ function _init()
 end
 
 function _draw()
+  --important map elements
+  --cls() refreshes the screen so we don't have repeating images
   cls()
+  --map forces us to use the proper map we've made
   map(0,0)
  
-  --place enemies
-  for m in all(critter) do
-    drawspr(m)
-    rect(m.x,m.y,m.x+m.w,m.y+m.w)
-  end
-
-  --place breakable doors
-  --disappear when we go through
-  for m in all(door) do    
-    if m.hp>0
-    then
-      spr(024,m.x,m.y-8)
-      spr(025,m.x+8,m.y-8)
-      spr(040,m.x,m.y)
-      spr(041,m.x+8,m.y)
-    else
-      del(door,m)
-    end
-  end
- 
+  --place our entities, doors and enemies
+  doorspr() 
+  enemyspr()
+   
   --place invisible walls
   --disappear when we're inside 
   placewall(wall[1],player.x,66)
-  --post cutscene
+  --cause the outside to disappear when inside
   placewall(wall[2],64,player.x)
 
   --place player 
@@ -111,40 +106,22 @@ end
 function _update()
 
  pauset()
- gravity()  
  cutscene()
-  
-
- for m in all(critter) do
-   --calculate critter movement
-   critter_move(m)
-   --calculate if they're touching
-   if entity_wall(player,0) and player.inv==0
-   then
-     player.hp-=1
-     player.inv=30
-     --figure out which way to bump the player
-     if ((player.x+(player.w/2))-(m.x+(m.w/2)))>0
-     then
-       player.x+=6
-       player.y-=6
-     else
-       player.x-=6
-       player.y-=6
-     end
-   end
-   
-   if (m.hp==0)
-   then
-     del (critter,m)
-   end
- end 
  
+ if tempause<1
+ then 
+   critterai()
+   gravity() 
+ end
+  
+ damageplayer()
+
 end
 
 
 -->8
 --movement
+--reworked last on 07/13
 
 function collision(obj,dir,flg)
   --obj is a table w/ x,y,w,h
@@ -219,7 +196,7 @@ function move()
     player.flp=true
     player.dir="left"
     --now, we check to see if we actually move
-    if not entity_wall(player,0) and (not collision(player,"left",2))
+    if not entity_wall(player,0,2) and (not collision(player,"left",2))
 	   then 	   
 	     player.x-=player.mp
 	   end
@@ -228,7 +205,7 @@ function move()
   then
     player.flp=false    
     player.dir="right"
-    if not entity_wall(player,0) and (not collision(player,"right",2))
+    if not entity_wall(player,0,2) and (not collision(player,"right",2))
   	 then
 	    	player.x+=player.mp
 	   end
@@ -242,54 +219,30 @@ function move()
   end
 end
 
-function entity_wall(x,num)
-  --purpose of this function is to test if there's an item to the left or right of "x"
-  --if num=0, it's the player
-  --if num=1, it's an enemy 
-  --if num=2, it's a nail 
-  
-  tempx=0
-  --we need to adjust the numbers based on if the collison we're aiming for is to the left or to the right
-  if x.dir=="left" 
-  then
-    tempx=4
-  else
-    tempx=-4
-  end  
-    
-  --if "x" is next to any door, return true.
-  for d in all(door) do
-    if abs(x.x-tempx-d.x)<=4 
-    and abs(x.y-d.y)<=12
-    then
-      return true
-    end
-  end
-  
-  --if "x" is next to any enemy, return true  
-  if (num==0 or num==2)
-  then
-		  for c in all(critter) do
-		    if abs((x.x-1+(x.w/2))-(c.x+(c.w/2)))<=8
-		    and abs(x.y-c.y)<=4
-		    then
-		      return true
-		    end
-		  end 
-  end 
-  
-  --if there's no doors or enemies near, then we return that there's nothing next to us
-  return false
+--a function made to check if we're colliding with 
+--either the environment or an entity
+function movementcheck(obj,txt,num1,num2,num3)
+  --if there is no static walls we're about to hit
+  if not entity_wall(obj,num1,num2) 
+  --and we're not hitting any entities
+  and not collision(obj,txt,num3)
+		then 
+		  return true
+		else		
+		  return false
+		end
 end
+
 -->8
 --attacking
+--rework me next
 
 function attack()
   --we will need to create a lingering attack and hitbox
   if btn(4) and nat==0
   then 
     --to prevent spamming in future update
-    --nat=30
+    nat=10
     
     --we prioritize vertical attacks
     --attack up
@@ -313,37 +266,44 @@ function attack()
 end
 
 function natk(nx,ny,nsp,tf1,tf2)
+  --we want the nail to stay out for a few seconds after pressing it
+  atktime=10
   --changing stats for the nail
-  nail.x=player.x+nx
-  nail.y=player.y+ny
-  nail.sp=nsp
-    
-  spr(nail.sp,nail.x,nail.y,1,1,tf1,tf2)    
-  
-  --hurt enemies if they're in it
-  for m in all(critter) do
-    --calculate if they're touching
-    if livecol(m,nail) and m.inv==0
-    then
-      m.hp-=1
-      m.inv=30
-    end
-  end
-  
-  --hurt doors if they're in it
-  for m in all(door) do
-    --calculate if they're touching
-    if livecol(m,nail) and m.inv==0
-    then
-      m.hp-=1
-      m.inv=30
-    end
-  end 
+  if atktime>0
+		then
+				nail.x=player.x+nx
+				nail.y=player.y+ny
+				nail.sp=nsp
+				  
+				spr(nail.sp,nail.x,nail.y,1,1,tf1,tf2)    
+				
+				--hurt enemies if they're in it
+				for m in all(critter) do
+				  --calculate if they're touching
+				  if livecol(m,nail,0,8,4) and m.inv==0
+				  then
+				    m.hp-=1
+				    m.inv=30
+				  end
+				end
+				
+				--hurt doors if they're in it
+				for m in all(door) do
+				  --calculate if they're touching
+				  if livecol(m,nail,0,6,4) and m.inv==0
+				  then
+				    m.hp-=1
+				    m.inv=30
+				  end
+				end 
+		end
 end
 
 -->8
 --enemy ai
+--reworked last on 07/13
 
+--a function to add an enemy to our list of enemies
 function addcrit(idd,typ,mx,my)
   local m={
     --identification
@@ -361,35 +321,68 @@ function addcrit(idd,typ,mx,my)
     --invincibility frames
     inv=0,
     --hp - default is 2 hits
-    hp=2,
-    }
-  
+    --   - if testing, 1 hit
+    hp=1,
+    } 
   add (critter,m)
 end
 
+--ensure that our enemies have sprites
+function enemyspr()
+  --we have to ensure we're drawing every critter that appears, including ones that retroactively appear
+  for m in all(critter) do
+    --a function to draw it properly
+    drawspr(m)
+    --allow us to see the hitbox
+    --rect(m.x,m.y,m.x+m.w,m.y+m.w)
+  end
+end
+
+function critterai()
+		for m in all(critter) do
+    --calculate critter movement
+    critter_move(m)
+    --if our critter took lethal damage   
+    if (m.hp==0)
+    then
+      --kill it
+      del (critter,m)
+    end
+  end
+end 
+ 
+
+--ensure that our enemies can move
 function critter_move(obj)
-  --need to identify how it moves
+  --we identity our enemies by their id
+  --with an id of 0, these are crawlids and we will give appropriate movement as such
   if obj.id==0
   then
-    --moving left
-  		if (obj.dir=="left" 
-  		and not entity_wall(obj,1) 
-  		and not collision(obj,"left",3))
-				then 
+    --if we were last moving left,
+    if obj.dir=="left" 
+    --we check if we can move left
+    and movementcheck(obj,"left",1,2,3)
+    then
+				  --if all checks pass, we move by the movement opportunity
 				  obj.x-=obj.mp	
 				else
+				  --if it fails, we hit something so we'll turn around
 				  obj.dir="right"
+				  --we also adjust our sprite to turn around
 				  obj.sp=066
 			 end	  
 			 
-	   --moving right
-	   if (obj.dir=="right" 
-	   and not entity_wall(obj,1) 
-	   and not collision(obj,"right",3))
+    --if we were last moving right
+	   if obj.dir=="right" 
+	   --we check if we can move right
+	   and movementcheck(obj,"right",1,2,3)
 				then 
+				   --if all checks pass, we move by the movement opportunity
 				  obj.x+=obj.mp	
 				else
+				  --if it fails, we hit something so we'll turn around
 				  obj.dir="left"
+				  --we also adjust our sprite to turn around
 				  obj.sp=064
 			 end
 		end
@@ -429,16 +422,41 @@ function placewall(w,x1,x2)
     placesprite(w)
   end
 end
+
+function doorspr()
+  for m in all(door) do    
+    if m.hp>0
+    then
+      spr(024,m.x,m.y-8)
+      spr(025,m.x+8,m.y-8)
+      spr(040,m.x,m.y)
+      spr(041,m.x+8,m.y)
+    else
+      del(door,m)
+    end
+  end
+end
 -->8
 --utilities
 
 function pauset()
-  if pause>0
-  then
-    pause-=1
-  end
+
+   if atktime>0
+   then
+     atktime-=1
+   end
+
+   if tempause>0
+   then
+     tempause-=1
+   end
+   
+   if pause>0
+   then
+     pause-=1
+   end  
  
-  if pause==0
+  if pause==0 and tempause==0
   then 
     move()
   end 
@@ -503,12 +521,8 @@ function ui()
 	 --debug testing 
 	 print("left?:",camx+84,camy+10) 
 	 print(player.x,camx+108,camy+10) 
-	 print("inv:",camx+84,camy+18) 
-	 print(player.inv,camx+108,camy+18)
-	 for m in all(critter) do
-	   print("m.x:",camx+84,camy+26)
-	   print(m.x,camx+108,camy+26)
-	 end
+	 print("atktime:",camx+84,camy+18) 
+	 print(atktime,camx+118,camy+18)
 end
 
 --basic draw function to save space
@@ -558,20 +572,102 @@ function cutscene()
 end
 -->8
 --collision
+--reworked last on 07/13
 
-function livecol(a,b)
- --calculations
- 
- if abs(a.x-b.x)<4
- then
-    if abs(a.y-b.y)<4
+--how to tell if two entities are colliding
+function livecol(a,b,c,x,y)
+  --a represents the first object
+  --b represents the second object
+  --c represents any additional variables
+  --if the two entities are within 4 pixels of their x position
+  if abs(a.x-b.x-c)<x
+  then
+    --and if they're within 4 pixels of their y position
+    if abs(a.y-b.y)<y
     then
-       return true
+      --then they're touching
+      return true
     end
- else
-   return false
- end
+  else
+    --otherwise they're not
+    return false
+  end
 end
+
+
+function entity_wall(x,num1,num2)
+  --we're testing to see if an entity is touching something
+  --we identify what it is based on num1, and what we're testing for in num2
+  --if num=0, it's the player
+  --if num=1, it's an enemy 
+  --if num=2, it's a door
+  --if num=3, it's the nail
+  
+  --we create a temporary variable to adjust the numbers as necessary
+  --we adjust based on it being left or right
+  if x.dir=="left" 
+  then
+    tempx=4
+  else
+    tempx=-4
+  end  
+    
+  --if we're testing for wall collision
+  if num2==2
+  then
+    --check every door
+    for d in all(door) do
+      --and if we're colliding with at least one of them, return true
+      if livecol(x,d,tempx,4,12)
+      then
+        return true
+      end
+    end
+  end
+  
+  --if we're testing for enemies  
+  if num2==1
+  then
+    --check every critter
+		  for c in all(critter) do
+		    --if we're colliding with them
+		    if abs((x.x-1+(x.w/2))-(c.x+(c.w/2)))<=8
+		    and abs(x.y-c.y)<=4
+		    then
+		      return true
+		    end
+		  end 
+  end 
+  
+  --if there's no doors or enemies near, then we return that there's nothing next to us
+  return false
+end
+
+function damageplayer()
+  --calculate if the player is touching something dangerous
+	 if entity_wall(player,0,1) and player.inv==0
+	 then
+		  player.hp-=1
+		  player.inv=60
+		  tempause=30
+		  --create function to make it visibly clear you took damage
+		  
+				for m in all(critter) do  
+			 --figure out which way to bump the player
+			   if ((player.x+(player.w/2))-(m.x+(m.w/2)))>0
+		    then
+		      --move them away accordingly
+		      --player.x+=6
+		      --player.y-=6
+				  else
+				    --player.x-=6
+			     --player.y-=6
+				  end
+		  end
+		end
+end
+
+
 __gfx__
 00000000000000000555555000555500000000000000000000000000000000005111151551515115511511151151151551115151150000510000005115000000
 00000000006000605777757505776650000000000000500000000000000000005111151551515115511511151151151551115151500000050000000550000000
